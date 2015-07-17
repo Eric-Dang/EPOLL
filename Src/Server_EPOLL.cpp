@@ -6,4 +6,13 @@
 //  Email:		frederick.dang@gmail.com
 //	Purpose:	EPOLL Ê¾Àý
 //-------------------------------------------------------------------------------------------------
-//
+#include "System.h"
+#include "Common.h"
+
+int main()
+{
+
+
+	return 1;
+}
+
