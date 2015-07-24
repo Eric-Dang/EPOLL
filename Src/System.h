@@ -10,10 +10,14 @@
 #ifndef __WIN32
 // 基础类库
 #include <stdio.h>
+#include <string.h>
+#include <assert.h>
 
 // 网络相关
+#include <sys/types.h>
+#include <sys/socket.h>
 #include <sys/epoll.h>
-
+#include <netdb.h>
 
 
 #endif // __WIN32
