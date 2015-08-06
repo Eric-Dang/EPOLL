@@ -8,7 +8,7 @@
 //-------------------------------------------------------------------------------------------------
 #include "System.h"
 #include "Common.h"
-
+//-------------------------------------------------------------------------------------------------
 // 文件句柄
 typedef FileHandle 	int;
 // 网络连接 socket
@@ -26,18 +26,131 @@ typedef ConnectType int;
 struct WorkTreadData
 {
 	ConnectType sConn;
-	FikeHandle  epollHandle;
+	FileHandle  epollHandle;
 };
 
+//-------------------------------------------------------------------------------------------------
+bool SetNonBlocking(ConnectType sConn);
+//-------------------------------------------------------------------------------------------------
 
 void* Network_EPOLL_WorkThread(LPVOID pParam)
 {
 	WorkTreadData* pThreadData = (WorkTreadData*) pParam;
+	ConnectType sListenConn = pThreadData->sConn;
+	FileHandle	eHandle = pThreadData->epollHandle;
+
 	epoll_event events[EPOLL_MAX_EVENT_NUM];
 	
 	while(true)
 	{
-		
+		int iEpollEvent = epoll_wait(eHandle, events, EPOLL_MAX_EVENT_NUM, -1);
+	
+		if(iEpollEvent == -1)
+		{
+			LogPrint("epoll_wait error [%s].", strerror(errno));
+			return ((void*)0)
+		}
+
+		for(int i = 0; i < iEpollEvent; i++)
+		{			
+			if((events[i].events & EPOLLERR) || (events[i].events & EPOLLHUP) || (!(events[i].events & EPOLLIN)))
+			{
+				/*An error has occured on this fd, or the socket is not ready for reading (why were we notified then?)*/
+				LogPrint("epoll error Error Event!");
+				close(events[i].data.fd);
+				continue;
+			}
+			else if(events[i].data.fd == sListenConn)
+			{
+				// accept new connect
+				ConnectType sAcceptConnect = 0;
+				while(sAcceptConnect >= 0)
+				{
+					sockaddr_in ssiAddress;
+					socklen_t   sltLen = sizeof(ssiAddress);
+					bzero(&ssiAddress, sltLen);
+					
+					sAcceptConnect = accept(sListenConn, (sockaddr*)&ssiAddress, &sltLen);
+					if(sAcceptConnect == -1)
+						break;
+
+					if(!SetNonBlocking(sAcceptConnect))
+					{
+						LogPrint("SetNonBlocking Failed, sAcceptConnect = [%d], ip = [%s], port = [%d].", sAcceptConn, inet_ntoa(ssiAddress.sin_addr), ssiAddress.sin_port);
+						break;
+					}
+					
+					// epoll ctl add; ee 将在epoll_wait中返回。
+					epoll_event ee;
+					ee.data.fd = sAcceptConnect;
+					ee.events = EPOLLOUT | EPOLLET;; // EPOLLIN | EPOLLET;
+					if(epoll_ctl(eHandle, EPOLL_CTL_ADD, sAcceptConnect, &ee) == -1)
+					{
+						LogPrint("epoll_ctl Failed, sAcceptConnect = [%d], ip = [%s], port = [%d].", sAcceptConn, inet_ntoa(ssiAddress.sin_addr), ssiAddress.sin_port);
+						LogPrint("epoll_ctl Failed: %s", strerror(errno));
+						close(sAcceptConnect);
+						continue;
+					}
+				}
+				else if(events[i].events & EPOLLIN)
+				{
+					// Read
+					char ReadBuffer[10240];
+					bzero(ReadBuffer, 10240);
+					
+					int iRecvSize = read(events[i].data.fd, ReadBuffer, 10240);
+					if(iRecvSize > 0)
+					{
+						LogPrint("Recv From Client [%s].", ReadBuffer);
+
+						epoll_event ee;
+						ee.data.fd = sAcceptConnect;
+						ee.events = EPOLLOUT | EPOLLET;
+						epoll_ctl(eHandle, EPOLL_CTL_MOD, events[i].data.fd, ee)
+					}
+					else if((iRecvSize < 0) && (errno == EWOULDBLOCK || errno == EINTR))
+					{
+						epoll_event ee;
+						ee.data.fd = sAcceptConnect;
+						ee.events = 0;
+						epoll_ctl(eHandle, EPOLL_CTL_DEL, events[i].data.fd, ee)
+						close(events[i].data.fd);
+					}
+				}
+				else if(events[i].events & EPOLLOUT)
+				{
+					// Write
+					char WriteBuffer[10240];
+					bzero(WriteBuffer, 10240);
+					struct timeval tt;
+					gettimeofday(&tt, NULL);
+					sprintf(WriteBuffer, "Server New Send %d", (tt.tv_sec*1000 + tt.tv_usec));
+					int iSendLen = strlen(WriteBuffer);
+
+					int nSend = write(events[i].data.fd, WriteBuffer, iSendLen);
+					if(nSend <= 0)
+					{
+						if(errno == EINTR || errno == EWOULDBLOCK || errno == EAGAIN)
+							break;
+						else
+						{
+							epoll_event ee;
+							ee.data.fd = sAcceptConnect;
+							ee.events = 0;
+							epoll_ctl(eHandle, EPOLL_CTL_DEL, events[i].data.fd, ee)
+							close(events[i].data.fd);
+						}
+					}
+					else
+					{
+						epoll_event ee;
+						ee.data.fd = sAcceptConnect;
+						ee.events = EPOLLIN | EPOLLET;
+						epoll_ctl(eHandle, EPOLL_CTL_MOD, events[i].data.fd, ee)
+					}
+				}
+			}			
+		}
 	}
 
 	return 0;
