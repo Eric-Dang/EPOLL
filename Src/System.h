@@ -12,12 +12,20 @@
 #include <stdio.h>
 #include <string.h>
 #include <assert.h>
+#include <stdarg.h>
+#include <errno.h>
+#include <unistd.h>
+#include <sys/time.h>
 
 // 网络相关
+#include <netinet/in.h>
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <arpa/inet.h>
 #include <sys/epoll.h>
 #include <netdb.h>
+#include <fcntl.h>
+#include <netinet/tcp.h>
 
 
 #endif // __WIN32
