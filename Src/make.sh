@@ -1,1 +1,1 @@
-g++ Server_EPOLL.cpp -o Server
+g++ Server_EPOLL.cpp -pthread -o NetServer.bin

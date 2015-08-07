@@ -25,7 +25,7 @@ typedef int BOOL;
 #define SOCKET_ERROR -1
 #define EPOLL_MAX_EVENT_NUM 200
 
-struct WorkTreadData
+struct WorkThreadData
 {
 	ConnectType sConn;
 	FileHandle  epollHandle;
@@ -37,7 +37,7 @@ bool SetNonBlocking(ConnectType sConn);
 
 void* Network_EPOLL_WorkThread(void* pParam)
 {
-	WorkTreadData* pThreadData = (WorkTreadData*) pParam;
+	WorkThreadData* pThreadData = (WorkThreadData*) pParam;
 	ConnectType sListenConn = pThreadData->sConn;
 	FileHandle	eHandle = pThreadData->epollHandle;
 
@@ -278,6 +278,7 @@ int main()
 	// 设置非阻塞
 	if(!SetNonBlocking(sConnect))
 		return 0;
+	
 	// 创建EPOLL
 	FileHandle fhEPOLL = epoll_create(200);
 	if(fhEPOLL == -1)
@@ -286,12 +287,13 @@ int main()
 		return 0;
 	}
 
-	WorkTreadData* pThreadData = new WorhTreadData;
+	WorkThreadData* pThreadData = new WorkThreadData;
 	pThreadData->sConn = sConnect;
 	pThreadData->epollHandle = fhEPOLL;
-
-	int iWorkThreadID, iRet;
-	if((iRet = pthread_create(&iWorkThreadID,  NULL, Network_WorkThread, pThreadData)) != 0)
+	
+	pthread_t iWorkThreadID;
+	int iRet;
+	if((iRet = pthread_create(&iWorkThreadID,  NULL, Network_EPOLL_WorkThread, pThreadData)) != 0)
 	{
 		// 创建线程失败
 		LogPrint("Create Thread Failed [%d]", iRet);

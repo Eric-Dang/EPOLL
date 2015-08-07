@@ -16,6 +16,7 @@
 #include <errno.h>
 #include <unistd.h>
 #include <sys/time.h>
+#include <pthread.h>
 
 // 网络相关
 #include <netinet/in.h>
