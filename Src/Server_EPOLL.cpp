@@ -44,8 +44,10 @@ void* Network_EPOLL_WorkThread(void* pParam)
 
 	epoll_event events[EPOLL_MAX_EVENT_NUM];
 	
+	int count = 0;
 	while(true)
 	{
+		count++;
 		int iEpollEvent = epoll_wait(eHandle, events, EPOLL_MAX_EVENT_NUM, -1);
 	
 		if(iEpollEvent == -1)
@@ -53,9 +55,10 @@ void* Network_EPOLL_WorkThread(void* pParam)
 			LogPrint("epoll_wait error [%s].", strerror(errno));
 			return ((void*)0);
 		}
-
+		printf("epoll_wait event num = [%d].\n", iEpollEvent);
 		for(int i = 0; i < iEpollEvent; i++)
 		{			
+			printf("events[i].events = [%d], event fd = [%d], count = [%d].\n", events[i].events, events[i].data.fd, count);
 			if((events[i].events & EPOLLERR) || (events[i].events & EPOLLHUP))
 			{
 				/*An error has occured on this fd, or the socket is not ready for reading (why were we notified then?)*/
@@ -87,7 +90,7 @@ void* Network_EPOLL_WorkThread(void* pParam)
 					// epoll ctl add; ee 将在epoll_wait中返回。
 					epoll_event ee;
 					ee.data.fd = sAcceptConnect;
-					ee.events = EPOLLOUT | EPOLLET;; // EPOLLIN | EPOLLET;
+					ee.events = EPOLLOUT | EPOLLET | EPOLLIN; // EPOLLIN | EPOLLET;
 					if(epoll_ctl(eHandle, EPOLL_CTL_ADD, sAcceptConnect, &ee) == -1)
 					{
 						LogPrint("epoll_ctl Failed, sAcceptConnect = [%d], ip = [%s], port = [%d].", sAcceptConnect, inet_ntoa(ssiAddress.sin_addr), ssiAddress.sin_port);
@@ -102,16 +105,17 @@ void* Network_EPOLL_WorkThread(void* pParam)
 				// Read
 				char ReadBuffer[10240];
 				bzero(ReadBuffer, 10240);
-					
+				
+				printf(">> EPOLL IN %d\n", count);
+
 				int iRecvSize = read(events[i].data.fd, ReadBuffer, 10240);
 				if(iRecvSize > 0)
 				{
 					LogPrint("Recv From Client [%s].", ReadBuffer);
-
 					epoll_event ee;
 					ee.data.fd = events[i].data.fd;
-					ee.events = EPOLLOUT | EPOLLET;
-					epoll_ctl(eHandle, EPOLL_CTL_MOD, events[i].data.fd, &ee);
+					ee.events = EPOLLIN | EPOLLET | EPOLLOUT;
+					epoll_ctl(eHandle, EPOLL_CTL_MOD, events[i].data.fd, &ee); 
 				}
 				else if((iRecvSize < 0) && (errno == EWOULDBLOCK || errno == EINTR))
 				{
@@ -124,6 +128,7 @@ void* Network_EPOLL_WorkThread(void* pParam)
 			}
 			else if(events[i].events & EPOLLOUT)
 			{
+				printf("<< EPOLL OUT %d\n", count);
 				// Write
 				char WriteBuffer[10240];
 				bzero(WriteBuffer, 10240);
@@ -150,11 +155,12 @@ void* Network_EPOLL_WorkThread(void* pParam)
 				{
 					epoll_event ee;
 					ee.data.fd = events[i].data.fd;
-					ee.events = EPOLLIN | EPOLLET;
+					ee.events = EPOLLIN | EPOLLET | EPOLLIN;
 					epoll_ctl(eHandle, EPOLL_CTL_MOD, events[i].data.fd, &ee);
 				}
 			}
 		}			
+		printf("----------------------------------------------\n");
 	}
 
 	return 0;

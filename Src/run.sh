@@ -1,1 +1,1 @@
-./NetServer.bin
+./NetServer.bin &> server.log&
