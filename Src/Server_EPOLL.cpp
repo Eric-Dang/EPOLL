@@ -37,6 +37,7 @@ bool SetNonBlocking(ConnectType sConn);
 
 void* Network_EPOLL_WorkThread(void* pParam)
 {
+	LogPrint("Network_EPOLL_WorkThread Start Run");
 	WorkThreadData* pThreadData = (WorkThreadData*) pParam;
 	ConnectType sListenConn = pThreadData->sConn;
 	FileHandle	eHandle = pThreadData->epollHandle;
@@ -55,10 +56,10 @@ void* Network_EPOLL_WorkThread(void* pParam)
 
 		for(int i = 0; i < iEpollEvent; i++)
 		{			
-			if((events[i].events & EPOLLERR) || (events[i].events & EPOLLHUP) || (!(events[i].events & EPOLLIN)))
+			if((events[i].events & EPOLLERR) || (events[i].events & EPOLLHUP))
 			{
 				/*An error has occured on this fd, or the socket is not ready for reading (why were we notified then?)*/
-				LogPrint("epoll error Error Event!");
+				LogPrint("epoll error Error Event [%d]!", events[i].events);
 				close(events[i].data.fd);
 				continue;
 			}
@@ -82,6 +83,7 @@ void* Network_EPOLL_WorkThread(void* pParam)
 						break;
 					}
 					
+					LogPrint("New Connect Accept");
 					// epoll ctl add; ee 将在epoll_wait中返回。
 					epoll_event ee;
 					ee.data.fd = sAcceptConnect;
@@ -279,6 +281,8 @@ int main()
 	if(!SetNonBlocking(sConnect))
 		return 0;
 	
+	LogPrint("Create Linsten Socket OK And Set NON Block。[%d]", sConnect);
+	
 	// 创建EPOLL
 	FileHandle fhEPOLL = epoll_create(200);
 	if(fhEPOLL == -1)
@@ -286,6 +290,8 @@ int main()
 		LogPrint("epoll_create Failed [%d]", errno);
 		return 0;
 	}
+
+	LogPrint("Create Epoll OK, [%d]", fhEPOLL);
 
 	WorkThreadData* pThreadData = new WorkThreadData;
 	pThreadData->sConn = sConnect;
@@ -300,6 +306,8 @@ int main()
 		return 0;
 	}
 
+	LogPrint("Create Thread Success");
+	
 	epoll_event ee;
 	ee.events = EPOLLIN;
 	ee.data.fd = sConnect;
@@ -308,6 +316,8 @@ int main()
 		LogPrint("epoll_ctl error!");
 		return 0;
 	}
+	
+	LogPrint("Listen Socket associate with EPOLL Success");
 
 	while(true)
 	{
