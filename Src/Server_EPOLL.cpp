@@ -20,7 +20,7 @@ typedef int BOOL;
 #define ServerIP "192.168.150.128"
 #define ServerPort 6666
 
-#define UseIPv4
+//#define UseIPv4
 
 #define SOCKET_ERROR -1
 #define EPOLL_MAX_EVENT_NUM 200
@@ -193,16 +193,20 @@ int main()
 #ifndef UseIPv4	
 	// 使用 getaddrinfo函数处理
 	struct addrinfo addrHints, *addrRet, *addrNext;
-	memset(&hints, 0, sizeof(addrHost));
+	memset(&addrHints, 0, sizeof(addrHints));
 	addrHints.ai_family = AF_INET;
 	addrHints.ai_socktype = SOCK_STREAM;
 	addrHints.ai_protocol = IPPROTO_IP;
 	addrHints.ai_flags = AI_PASSIVE;
 	
-	int iRet = LogPrint(ServerIP, (char*)ServerPort, &addrHints, &addrRet);
+	char port[16];
+	bzero(port, 16);
+	sprintf(port, "%d", ServerPort);	
+
+	int iRet = getaddrinfo(ServerIP, port, &addrHints, &addrRet);
 	if(iRet != 0)
 	{
-		LogPrint("LogPrint Error [%d] [%s]", iRet, gai_strerror(iRet));
+		LogPrint("getaddrinfo Error [%d] [%s]", iRet, gai_strerror(iRet));
 	}
 	else
 	{
@@ -304,11 +308,11 @@ int main()
 	pThreadData->epollHandle = fhEPOLL;
 	
 	pthread_t iWorkThreadID;
-	int iRet;
-	if((iRet = pthread_create(&iWorkThreadID,  NULL, Network_EPOLL_WorkThread, pThreadData)) != 0)
+	int iRet2;
+	if((iRet2 = pthread_create(&iWorkThreadID,  NULL, Network_EPOLL_WorkThread, pThreadData)) != 0)
 	{
 		// 创建线程失败
-		LogPrint("Create Thread Failed [%d]", iRet);
+		LogPrint("Create Thread Failed [%d]", iRet2);
 		return 0;
 	}
 
