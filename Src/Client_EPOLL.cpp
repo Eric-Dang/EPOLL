@@ -54,7 +54,7 @@ void* Network_EPOLL_WorkThread(void* pParam)
 
 		for(int i = 0; i < iEpollEvent; i++)
 		{			
-			if((events[i].events & EPOLLERR) || (events[i].events & EPOLLHUP) || (!(events[i].events & EPOLLIN)))
+			if((events[i].events & EPOLLERR) || (events[i].events & EPOLLHUP))
 			{
 				/*An error has occured on this fd, or the socket is not ready for reading (why were we notified then?)*/
 				LogPrint("epoll error Error Event!");
@@ -218,7 +218,7 @@ int main()
 	}
 		
 	epoll_event ee;
-	ee.events = EPOLLIN | EPOLLOUT;
+	ee.events = EPOLLOUT | EPOLLET;
 	ee.data.fd = sConnect;
 	if(epoll_ctl(fhEPOLL, EPOLL_CTL_ADD, sConnect, &ee) == -1)
 	{
