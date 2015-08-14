@@ -20,7 +20,7 @@ typedef int BOOL;
 #define ServerIP "192.168.150.128"
 #define ServerPort 6666
 
-#define UseIPv4
+//#define UseIPv4
 
 #define SOCKET_ERROR -1
 #define EPOLL_MAX_EVENT_NUM 200
@@ -37,14 +37,17 @@ bool SetNonBlocking(ConnectType sConn);
 
 void* Network_EPOLL_WorkThread(void* pParam)
 {
+	LogPrint("Network_EPOLL_WorkThread Start Run");
 	WorkThreadData* pThreadData = (WorkThreadData*) pParam;
 	ConnectType sListenConn = pThreadData->sConn;
 	FileHandle	eHandle = pThreadData->epollHandle;
 
 	epoll_event events[EPOLL_MAX_EVENT_NUM];
 	
+	int count = 0;
 	while(true)
 	{
+		count++;
 		int iEpollEvent = epoll_wait(eHandle, events, EPOLL_MAX_EVENT_NUM, -1);
 	
 		if(iEpollEvent == -1)
@@ -52,13 +55,14 @@ void* Network_EPOLL_WorkThread(void* pParam)
 			LogPrint("epoll_wait error [%s].", strerror(errno));
 			return ((void*)0);
 		}
-
+		printf("epoll_wait event num = [%d].\n", iEpollEvent);
 		for(int i = 0; i < iEpollEvent; i++)
 		{			
-			if((events[i].events & EPOLLERR) || (events[i].events & EPOLLHUP) || (!(events[i].events & EPOLLIN)))
+			printf("events[i].events = [%d], event fd = [%d], count = [%d].\n", events[i].events, events[i].data.fd, count);
+			if((events[i].events & EPOLLERR) || (events[i].events & EPOLLHUP))
 			{
 				/*An error has occured on this fd, or the socket is not ready for reading (why were we notified then?)*/
-				LogPrint("epoll error Error Event!");
+				LogPrint("epoll error Error Event [%d]!", events[i].events);
 				close(events[i].data.fd);
 				continue;
 			}
@@ -82,10 +86,11 @@ void* Network_EPOLL_WorkThread(void* pParam)
 						break;
 					}
 					
+					LogPrint("New Connect Accept");
 					// epoll ctl add; ee 将在epoll_wait中返回。
 					epoll_event ee;
 					ee.data.fd = sAcceptConnect;
-					ee.events = EPOLLOUT | EPOLLET;; // EPOLLIN | EPOLLET;
+					ee.events = EPOLLOUT | EPOLLET | EPOLLIN; // EPOLLIN | EPOLLET;
 					if(epoll_ctl(eHandle, EPOLL_CTL_ADD, sAcceptConnect, &ee) == -1)
 					{
 						LogPrint("epoll_ctl Failed, sAcceptConnect = [%d], ip = [%s], port = [%d].", sAcceptConnect, inet_ntoa(ssiAddress.sin_addr), ssiAddress.sin_port);
@@ -100,16 +105,17 @@ void* Network_EPOLL_WorkThread(void* pParam)
 				// Read
 				char ReadBuffer[10240];
 				bzero(ReadBuffer, 10240);
-					
+				
+				printf(">> EPOLL IN %d\n", count);
+
 				int iRecvSize = read(events[i].data.fd, ReadBuffer, 10240);
 				if(iRecvSize > 0)
 				{
 					LogPrint("Recv From Client [%s].", ReadBuffer);
-
 					epoll_event ee;
 					ee.data.fd = events[i].data.fd;
-					ee.events = EPOLLOUT | EPOLLET;
-					epoll_ctl(eHandle, EPOLL_CTL_MOD, events[i].data.fd, &ee);
+					ee.events = EPOLLIN | EPOLLET | EPOLLOUT;
+					epoll_ctl(eHandle, EPOLL_CTL_MOD, events[i].data.fd, &ee); 
 				}
 				else if((iRecvSize < 0) && (errno == EWOULDBLOCK || errno == EINTR))
 				{
@@ -122,6 +128,7 @@ void* Network_EPOLL_WorkThread(void* pParam)
 			}
 			else if(events[i].events & EPOLLOUT)
 			{
+				printf("<< EPOLL OUT %d\n", count);
 				// Write
 				char WriteBuffer[10240];
 				bzero(WriteBuffer, 10240);
@@ -148,11 +155,12 @@ void* Network_EPOLL_WorkThread(void* pParam)
 				{
 					epoll_event ee;
 					ee.data.fd = events[i].data.fd;
-					ee.events = EPOLLIN | EPOLLET;
+					ee.events = EPOLLIN | EPOLLET | EPOLLIN;
 					epoll_ctl(eHandle, EPOLL_CTL_MOD, events[i].data.fd, &ee);
 				}
 			}
 		}			
+		printf("----------------------------------------------\n");
 	}
 
 	return 0;
@@ -185,16 +193,20 @@ int main()
 #ifndef UseIPv4	
 	// 使用 getaddrinfo函数处理
 	struct addrinfo addrHints, *addrRet, *addrNext;
-	memset(&hints, 0, sizeof(addrHost));
+	memset(&addrHints, 0, sizeof(addrHints));
 	addrHints.ai_family = AF_INET;
 	addrHints.ai_socktype = SOCK_STREAM;
 	addrHints.ai_protocol = IPPROTO_IP;
 	addrHints.ai_flags = AI_PASSIVE;
 	
-	int iRet = LogPrint(ServerIP, (char*)ServerPort, &addrHints, &addrRet);
+	char port[16];
+	bzero(port, 16);
+	sprintf(port, "%d", ServerPort);	
+
+	int iRet = getaddrinfo(ServerIP, port, &addrHints, &addrRet);
 	if(iRet != 0)
 	{
-		LogPrint("LogPrint Error [%d] [%s]", iRet, gai_strerror(iRet));
+		LogPrint("getaddrinfo Error [%d] [%s]", iRet, gai_strerror(iRet));
 	}
 	else
 	{
@@ -279,6 +291,8 @@ int main()
 	if(!SetNonBlocking(sConnect))
 		return 0;
 	
+	LogPrint("Create Linsten Socket OK And Set NON Block。[%d]", sConnect);
+	
 	// 创建EPOLL
 	FileHandle fhEPOLL = epoll_create(200);
 	if(fhEPOLL == -1)
@@ -287,19 +301,23 @@ int main()
 		return 0;
 	}
 
+	LogPrint("Create Epoll OK, [%d]", fhEPOLL);
+
 	WorkThreadData* pThreadData = new WorkThreadData;
 	pThreadData->sConn = sConnect;
 	pThreadData->epollHandle = fhEPOLL;
 	
 	pthread_t iWorkThreadID;
-	int iRet;
-	if((iRet = pthread_create(&iWorkThreadID,  NULL, Network_EPOLL_WorkThread, pThreadData)) != 0)
+	int iRet2;
+	if((iRet2 = pthread_create(&iWorkThreadID,  NULL, Network_EPOLL_WorkThread, pThreadData)) != 0)
 	{
 		// 创建线程失败
-		LogPrint("Create Thread Failed [%d]", iRet);
+		LogPrint("Create Thread Failed [%d]", iRet2);
 		return 0;
 	}
 
+	LogPrint("Create Thread Success");
+	
 	epoll_event ee;
 	ee.events = EPOLLIN;
 	ee.data.fd = sConnect;
@@ -308,6 +326,8 @@ int main()
 		LogPrint("epoll_ctl error!");
 		return 0;
 	}
+	
+	LogPrint("Listen Socket associate with EPOLL Success");
 
 	while(true)
 	{
