@@ -20,7 +20,7 @@ typedef int BOOL;
 #define ServerIP "192.168.150.128"
 #define ServerPort 6666
 
-//#define UseIPv4
+#define UseIPv4
 
 #define SOCKET_ERROR -1
 #define EPOLL_MAX_EVENT_NUM 200
@@ -251,7 +251,11 @@ int main()
 		// 将number型的IP地址转换为a.b.c.d类型的地址
 		char* aIP = inet_ntoa(*((struct in_addr *)h->h_addr));
 		
+		printf("inet_ntoa(%s)", aIP);
+			
 		inet_aton(aIP, &(addr.sin_addr));
+		printf("inet_aton(%s)", aIP);
+		fflush(stdout);
 	}
 	else
 	{

@@ -54,10 +54,11 @@ void* Network_EPOLL_WorkThread(void* pParam)
 
 		for(int i = 0; i < iEpollEvent; i++)
 		{			
-			if((events[i].events & EPOLLERR) || (events[i].events & EPOLLHUP))
+			if((events[i].events & EPOLLERR)) // || (events[i].events & EPOLLHUP))
 			{
 				/*An error has occured on this fd, or the socket is not ready for reading (why were we notified then?)*/
-				LogPrint("epoll error Error Event!");
+				LogPrint("epoll error Error Event(%d)!", events[i].events);
+				LogPrint("EPOLLERR(%d), EPOLLHUP(%d).", EPOLLERR, EPOLLHUP);
 				close(events[i].data.fd);
 				continue;
 			}
@@ -153,8 +154,11 @@ int main()
 	if(sConnect == SOCKET_ERROR)
 		return 0;
 
+	LogPrint("sConnect = (%d).\n", sConnect);
+
 	struct sockaddr_in addr;
 	memset(&addr, 0, sizeof(sockaddr_in));
+	//*
 	if(ServerIP)
 	{
 		struct hostent *h;
@@ -170,9 +174,11 @@ int main()
 	}
 	else
 	{
-		addr.sin_family = AF_INET;
-		addr.sin_addr.s_addr = htonl(INADDR_ANY);
-	}
+		LogPrint("do not give IP of server.");
+		return 0;
+	}//*/
+	addr.sin_family = AF_INET;
+	//addr.sin_addr.s_addr = inet_addr(ServerIP);
 	addr.sin_port = htons(ServerPort);
 
 	// 设置socket关闭时，等到待发送数据发送完成后再关闭连接
@@ -185,10 +191,6 @@ int main()
 	BOOL bNoDelay = true;
 	setsockopt(sConnect, IPPROTO_IP, TCP_NODELAY, (const char*)&bNoDelay, sizeof(bNoDelay));
 
-	// 设置非阻塞
-	if(!SetNonBlocking(sConnect))
-		return 0;
-	
 	// 创建EPOLL
 	FileHandle fhEPOLL = epoll_create(200);
 	if(fhEPOLL == -1)
@@ -209,14 +211,23 @@ int main()
 		LogPrint("Create Thread Failed [%d]", iRet);
 		return 0;
 	}
-
-	if (connect(sConnect, (sockaddr*)&addr, sizeof(sockaddr_in)) == -1)
+	
+	LogPrint("connect to server (%d)(%s)(%d).", sConnect, ServerIP, ServerPort);
+	int r;		
+	if ((r = connect(sConnect, (sockaddr*)&addr, sizeof(sockaddr_in))) == -1)
 	{
 		printf("connect to server failed, error = (%d)(%s).\n", errno, strerror(errno));
 		fflush(stdout);
 		return 0;
 	}
-		
+	
+	LogPrint("connect ret = (%d)", r);
+	// 设置非阻塞                                                                                                                                                                                   
+	if(!SetNonBlocking(sConnect))
+		return 0;
+	
+	LogPrint("next step: epoll_ctl");	
+
 	epoll_event ee;
 	ee.events = EPOLLOUT | EPOLLET;
 	ee.data.fd = sConnect;
